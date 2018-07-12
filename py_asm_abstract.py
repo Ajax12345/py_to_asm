@@ -29,11 +29,13 @@ class PyToAssembly(abc.ABC):
         return
     @abc.abstractmethod
     @py_to_asm_wrappers.validate_mov
-    def mov(self, dest, src) -> None:
+    def mov(self, dest, src, stack_assign=False) -> None:
         '''
         equivalent to 
         movl stc, dest
         --------------
         however, performs background moves, checks, and validations
+        --------------
+        :stack_assign => if a stackref variable is passed, the stackref counter will be incremented
         '''
         return
