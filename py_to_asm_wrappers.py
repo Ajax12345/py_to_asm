@@ -43,15 +43,43 @@ def validate_asm_integer(f):
         return f(_val)
     return wrapper
 
+
+def validate_mov_params(f):
+    def __wrapper(cls, _dest, _src, stack_assign=False):
+        if _dest.asm_type == 'integer':
+            raise asm_errors.InvalidMovDestination(f"Destination of {str(_src)} cannot be an integer")
+        return f(cls, _dest, _src, stack_assign)
+    return __wrapper
+
 def validate_mov(f):
-    def wrapper(cls, dest, src):
+    @validate_mov_params
+    def wrapper(cls, dest, src, stack_assign = False):
+        if (dest.asm_type == 'variable' or dest.asm_type == 'stackvar') and (src.asm_type == 'variable' or src.asm_type == 'stackvar'):
+            if dest.asm_type == 'variable' and not cls.value_exists(dest.name):
+                cls.declare(dest.name, 0)
+            cls.mov(cls.register.EAX, src)
+            return f(cls, dest, cls.register.EAX)
+        if dest.asm_type == 'stackvar' and src.asm_type == 'stackvar':
+            cls.mov(cls.register.EAX, src)
+            if stack_assign:
+                cls._stack_count += 4
+            return f(cls, cls.stackref, cls.register.EAX)
+        if dest.asm_type == 'stackvar' and stack_assign:
+            cls._stack_count += 4
+            return f(cls, cls.stackref, src)
+        if dest.asm_type == 'register' and dest._base == 'rsi':
+            cls._instructions.append(f'movslq {str(src)}, {str(dest)}')
+            cls._disassembled.append('set {}, {}'.format(cls.__class__.functionize(dest), cls.__class__.functionize(src)))
+            return
         return f(cls, dest, src)
+        
     return wrapper
 
 
 def validate_variable(f):
-    def wrapper(cls, _name):
-        if not cls.ref.value_exists(_name):
-            raise asm_errors.VariableNotDeclared(f"'{_name} not declared'")
+    def wrapper(cls, _name, supress = True):
+        if not supress:
+            if not cls.ref.value_exists(_name):
+                raise asm_errors.VariableNotDeclared(f"'{_name} not declared'")
         return f(cls, _name)
     return wrapper
