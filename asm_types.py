@@ -1,6 +1,15 @@
 import py_to_asm_wrappers
 import typing
 
+class ArrayIndex:
+    def __init__(self, _index, _home):
+        self._index = _index
+        self.home = _home
+        self.asm_type = 'arrayindex'
+        self._base = 'rsi'
+    def __str__(self):
+        return f'(%rdi, %rsi, 4)'
+
 class AsmInteger:
     def __init__(self, _val:int) -> None:
         self.name = _val
@@ -63,6 +72,11 @@ class Variable:
         self.home = _home
         self.asm_type = 'variable'
         self._base = name
+    @py_to_asm_wrappers.validate_index_array
+    def __getitem__(self, _loc):
+        self.home.lea(self.home.register.RDI, getattr(self.home.variable, self.name))
+        self.home.mov(self.home.register.RSI, _loc)
+        return ArrayIndex(_loc, self.home)
     def __str__(self):
         return f'{self.name}(%rip)'
     
