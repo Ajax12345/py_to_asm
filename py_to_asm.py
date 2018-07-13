@@ -2,8 +2,8 @@ import collections
 import typing
 import py_to_asm_wrappers
 import asm_types
-import py_asm_abstract
-
+import py_asm_abstract, os
+import contextlib, datetime
 
 class Asm(py_asm_abstract.PyToAssembly):
     def __init__(self, _label_name = None, is_main=False, suppress_warnings = False, stack_count = 4):
@@ -20,12 +20,21 @@ class Asm(py_asm_abstract.PyToAssembly):
     def value_exists(self, name:str) -> bool:
         return any(i.name == name for i in self._data)
 
+    def __contains__(self, _variable):
+        return self.value_exists(_variable.name)
+
     @property
     def integer(self):
         @py_to_asm_wrappers.validate_asm_integer
         def __wrapper(_value:int):
             return asm_types.AsmInteger(_value)
         return __wrapper
+
+    
+    def lea(self, dest, src) -> None:
+        self._instructions.append(f'lea {str(src)}, {str(dest)}')
+        self._disassembled.append(f'load {self.__class__.functionize(dest)}, {self.__class__.functionize(src)}')
+   
     @property
     def stackref(self):
         return asm_types.StackVar(self._stack_count)
@@ -51,13 +60,37 @@ class Asm(py_asm_abstract.PyToAssembly):
             self._disassembled.append(f'<setup {self.label_name}>')
         return self
 
+    @py_to_asm_wrappers.weak_operation_validate
+    def add(self, dest, src) -> None:
+        self._instructions.append(f'addl {str(src)}, {str(dest)}')
+        self._disassembled.append(f'<left load: {self.__class__.functionize(dest)}')
+        self._disassembled.append(f'<right load: {self.__class__.functionize(src)}')
+        self._disassembled.append(f'add in_place=True')
+
+    @py_to_asm_wrappers.weak_operation_validate
+    def sub(self, dest, src) -> None:
+        self._instructions.append(f'subl {str(src)}, {str(dest)}')
+        self._disassembled.append(f'<left load: {self.__class__.functionize(dest)}')
+        self._disassembled.append(f'<right load: {self.__class__.functionize(src)}')
+        self._disassembled.append(f'sub in_place=True')
+    
+    @py_to_asm_wrappers.mul_validate
+    def mul(self, dest, src) -> None:
+        self._instructions.append(f'imull {str(src)}, {str(dest)}')
+        self._disassembled.append(f'multiply load: {self.__class__.functionize(dest)}')
+        self._disassembled.append(f'<multiplier load: {self.__class__.functionize(src)}')
+        self._disassembled.append(f'mul in_place=True')
+    
     @property
     def register(self):
         return asm_types._Register(self)
 
-    def stackvalue(self, _val):
-        return asm_types.StackVar(_val)
+    def stackvalue(self, _val, increment=False):
+        return asm_types.StackVar(_val*([1, 4][increment]))
 
+    @py_to_asm_wrappers.check_value_exists
+    def __getitem__(self, _name):
+        return [i for i in self._data if i.name == _name][0]
 
     @property
     def variable(self):
@@ -68,6 +101,21 @@ class Asm(py_asm_abstract.PyToAssembly):
 
     def dis(self) -> str:
         return '\n'.join(self._get_dissassembled())
+
+    @contextlib.contextmanager
+    @py_to_asm_wrappers.validate_filename
+    def write(self, filename = None, run = False, compiler='gcc'):
+        if not filename:
+            d = datetime.datetime.now()
+            filename = f'{__file__[:-3]}asm{"".join(str(getattr(d, i)) for i in ["month", "day", "year", "hour", "minute", "second"])}.s'
+        with open(filename, 'w') as f:
+            f.write(str(self))
+        if run:
+            os.system(f'{compiler} {filename}')
+            os.system('./a.out')
+        yield
+
+        
 
     @py_to_asm_wrappers.setup_created(tear_down = True)
     def __exit__(self, *args):
@@ -89,27 +137,16 @@ class Asm(py_asm_abstract.PyToAssembly):
         _body = '{}:\n{}'.format(self.label_name, '\n'.join('\t{}'.format(i) for i in self._instructions))+'\n\n'+str(self._next if self._next is not None else '')
         return f'{_data_formatted}\n\n{_setup_formatted}\n{_body}'
     
+if __name__ == '__main__':
+    with Asm(_label_name = '_main', is_main = True) as asm:
+        asm.declare('james', [16, 17, 18])
+        asm.declare('joe', 15)
+        asm.mov(asm.register.EAX, asm.integer(5))
+        asm.mov(asm.register.EDX, asm.variable.joe)
+        asm.mul(asm.variable.james[asm.integer(1)], asm.register.EAX)    
+    print(asm)
 
-with Asm(_label_name = '_main', is_main = True) as asm:
-    asm.declare('james', [16, 17, 18])
-    asm.declare('joe', 15)
-    asm.mov(asm.stackref, asm.integer(5))
-    asm.mov(asm.stackref, asm.integer(10), stack_assign = True)
-    asm.mov(asm.stackref, asm.integer(200))
-    asm.mov(asm.stackref, asm.stackvalue(4), stack_assign=True)
-    with Asm(_label_name = 'loop', stack_count = asm._stack_count) as asm1:
-        asm1.mov(asm1.stackref, asm.integer(10), stack_assign = True)
-        asm1.declare('lilly', 12)
-        asm1.mov(asm1.variable.mom, asm1.variable.lilly)
-    
-    with Asm(_label_name = 'check_results', stack_count = asm1._stack_count) as asm2:
-        asm2.mov(asm2.stackref, asm2.integer(4), stack_assign=True)
-    
-    
-    asm.add_label(asm1)
-    asm.add_label(asm2)
 
-print(asm)
 
 
 
