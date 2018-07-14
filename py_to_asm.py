@@ -8,8 +8,9 @@ import contextlib, datetime
 #TODO: depreciate valid label check and lookup?
 
 class Asm(py_asm_abstract.PyToAssembly):
-    def __init__(self, _label_name = None, is_main=False, suppress_warnings = False, stack_count = 4):
+    def __init__(self, _label_name = None, is_main=False, suppress_warnings = False, stack_count = 4, _parent_data = []):
         self._data = []
+        self._copy_data = _parent_data
         self._next = None
         self._setup = []
         self.label_name = _label_name
@@ -20,7 +21,7 @@ class Asm(py_asm_abstract.PyToAssembly):
         self._stack_count = stack_count
         self._copies = {'inc':self.increment, 'dec':self.decrement, 'jmp':self.goto, 'jump':self.goto, 'asminteger':self.integer}
     def value_exists(self, name:str) -> bool:
-        return any(i.name == name for i in self._data)
+        return any(i.name == name for i in self._data+self._copy_data)
 
     def __contains__(self, _variable):
         return self.value_exists(_variable.name)
@@ -132,7 +133,7 @@ class Asm(py_asm_abstract.PyToAssembly):
 
     @py_to_asm_wrappers.check_value_exists
     def __getitem__(self, _name):
-        return [i for i in self._data if i.name == _name][0]
+        return [i for i in self._data+self._copy_data if i.name == _name][0]
 
     @property
     def variable(self):
@@ -188,22 +189,21 @@ class Asm(py_asm_abstract.PyToAssembly):
     def __getattr__(self, _instruction):
         return self._copies[_instruction]
 
-with Asm(_label_name = '_main', is_main = True) as asm:
-    asm.declare('james', [16, 17, 18])
-    asm.declare('joe', 15)
-    asm.declare('lill', 30)
-    asm.div(asm.variable.lill, asm.integer(2), int_res = asm.variable.result, mod=asm.variable.modulo)
-    asm.mov(asm.register.EAX, asm.asmfloat(23.232))
-    asm.mov(asm.stackref, asm.integer(20))
-    asm.cmp(asm.integer(32), asm.variable.joe, asm.operator.eq, asm.label._james)
-    with Asm(_label_name = '_james') as asm2:
-        asm2.add(asm2.variable.joe, asm2.integer(2))
+if __name__ == '__main__':
+    with Asm(_label_name = '_main', is_main = True) as asm:
+        asm.declare('james', [16, 17, 18])
+        asm.declare('joe', 15)
+        asm.declare('lill', 30)
+        asm.div(asm.variable.lill, asm.integer(2), int_res = asm.variable.result, mod=asm.variable.modulo)
+        asm.mov(asm.register.EAX, asm.asmfloat(23.232))
+        asm.mov(asm.stackref, asm.integer(20))
+        with Asm(_label_name = 'loop') as asm2:
+            asm2.mov(asm.variable.james[asm2.stackref], asm2.integer(1))
+        asm.add_label(asm2)
 
-    asm.add_label(asm2)
-
-  
-
-print(asm)
+    with asm.write(run=True) as _:
+        pass
+    print(asm)
 
 
 
