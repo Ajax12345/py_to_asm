@@ -2,12 +2,13 @@ from functools import wraps
 import asm_errors, warnings
 import re
 
+
 def is_valid_data(f):
     @wraps(f)
     def wrapper(cls, name, _to_store):
         if type(_to_store) not in f.__annotations__['_to_store']:
             raise TypeError(f'data values can only be integers or lists, but got {type(_to_store).__name__}')
-        cls._disassembled.append(f'declare {name}, {"int" if isinstance(_to_store, int) else "array"}({_to_store if isinstance(_to_store, int) else ", ".join(map(str, _to_store))})')
+        cls._disassembled.append(f'declare {name}, {type(_to_store).__name__ if not isinstance(_to_store, list) else "array"}({_to_store if not isinstance(_to_store, list) else ", ".join(map(str, _to_store))})')
         return f(cls, name, _to_store)
     return wrapper
 
@@ -137,6 +138,19 @@ def weak_operation_validate(f):
             cls._disassembled.append(f'{f.__name__} in_place=True')
             return
         return f(cls, _dest, _src)
+    return wrapper
+
+def compare_validate(f):
+    def wrapper(cls, left, right, operator, label):
+        if left.asm_type in ['integer', 'float']:
+            cls.mov(cls.register.EAX, left)
+            return f(cls, cls.register.EAX, right, operator, label)
+        if all(i.asm_type in ['variable', 'stackvar', 'arrayindex'] for i in [left, right]):
+            cls.mov(cls.register.EAX, right)
+            f(cls, left, cls.register.EAX, operator, label)
+            return
+        return f(cls, left, right, operator, label)
+    return wrapper
 
 def mul_validate(f):
     def wrapper(cls, _dest, _src):
@@ -146,5 +160,62 @@ def mul_validate(f):
             cls.mov(_dest, cls.register.EAX)
             return
         return f(cls, _dest, _src)
-        
+    return wrapper
+
+
+def div_validate(f):
+    def wrapper(cls, _num, _den, int_res = None, mod = None):
+        cls.mov(cls.register.EAX, _num)
+        cls.mov(cls.register.ECX, _den)
+        cls.mov(cls.register.EDX, cls.integer(0))
+        f(cls, _num, _den, int_res = int_res, mod = mod)
+        if int_res is not None:
+            if int_res.asm_type == 'variable' and int_res not in cls:
+                cls.declare(int_res.name, 0)
+            cls.mov(int_res, cls.register.EAX)
+        if mod is not None:
+            if mod.asm_type == 'variable' and mod not in cls:
+                cls.declare(mod.name, 0)
+            cls.mov(mod, cls.register.EDX)
+    return wrapper
+
+
+def validate_asm_float(f):
+    def wrapper(_val:float):
+        if not isinstance(_val, float):
+            raise TypeError("'AsmFloat' object must be passed a float value")
+        return f(_val)
+    return wrapper
+
+def validate_inplace(f):
+    def wrapper(cls, src):
+        if src.asm_type in ['integer', 'float']:
+            raise TypeError(f"'{src.asm_type}' data reference cannot be {f.__name__}ed")
+        if src.asm_type == 'register' and src._base.lower() == 'rsi':
+            cls._instructions.append(f'{f.__name__[:3]} {str(src)}')
+            cls._disassembled.append(f'{f.__name__} {cls.__class__.functionize(src)}')
+            return
+        return f(cls, src)
+    return wrapper
+
+
+def validate_copy_lookup(f):
+    def wrapper(cls, _instruc):
+        if _instruc not in cls._copies:
+            raise AttributeError(f"'{cls.__class__.__name__}' has no attribute '{_instruc}'")
+        return f(cls, _instruc)
+    return wrapper
+
+def validate_label_name(f):
+    def wrapper(cls, _name):
+        if not cls._ref.label_exists(_name):
+            raise asm_errors.InvalidLabelName(f"Label '{_name}' not created")
+        return f(cls, _name)
+    return wrapper
+
+def validate_comparison_sign(f):
+    def wrapper(cls, _sign):
+        if _sign.lower() not in cls._convert:
+            raise asm_errors.InvalidComparisonSign(f"'{_sign}' is not a valid comparison sign.")
+        return f(cls, _sign)
     return wrapper
