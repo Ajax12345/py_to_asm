@@ -17,7 +17,7 @@ with py_to_asm.Asm(_label_name = '_main', is_main=True) as asm:
 ```
 
 
-###result
+### result
 ```
 .data
 	input:.int 6, 4, 2, 8, 10
