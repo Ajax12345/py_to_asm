@@ -10,7 +10,7 @@ with py_to_asm.Asm(_label_name = '_main', is_main=True) as asm:
     asm.mov(asm.stackref, asm.integer(0))
     asm.mov(asm.variable.length, asm.variable.success)
     asm.add(asm.variable.length, asm.integer(10))
-    asm.cmp(asm.variable.length, asm.integer(18), asm.operator.eq, asm.label.end_resuls)
+    asm.cmp(asm.variable.length, asm.integer(18), asm.operator.eq, asm.label.end_results)
     with py_to_asm.Asm(_label_name = 'end_results', stack_count=asm._stack_count) as asm2:
         asm2.inc(asm2.stackref)
     asm.add_label(asm2)    
@@ -35,7 +35,7 @@ _main:
 	movl %eax, length(%rip)
 	addl $10, length(%rip)
 	cmpl $18, length(%rip)
-	je end_resuls
+	je end_results
 	leave
 	ret
 
