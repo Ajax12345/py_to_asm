@@ -12,3 +12,9 @@ class InvalidIndexAccess(Exception):
 
 class InvalidAsmFilename(Exception):
     pass
+
+class InvalidLabelName(Exception):
+    pass
+
+class InvalidComparisonSign(Exception):
+    pass
