@@ -5,6 +5,8 @@ import asm_types
 import py_asm_abstract, os
 import contextlib, datetime
 
+#TODO: depreciate valid label check and lookup?
+
 class Asm(py_asm_abstract.PyToAssembly):
     def __init__(self, _label_name = None, is_main=False, suppress_warnings = False, stack_count = 4):
         self._data = []
@@ -16,7 +18,7 @@ class Asm(py_asm_abstract.PyToAssembly):
         self._disassembled = ['scope:None' if self.label_name is None else f'scope<{self.label_name}>' if not self.is_main else f'scope<{self.label_name}, globl=True>']
         self.suppress_warnings = suppress_warnings
         self._stack_count = stack_count
-
+        self._copies = {'inc':self.increment, 'dec':self.decrement, 'jmp':self.goto, 'jump':self.goto, 'asminteger':self.integer}
     def value_exists(self, name:str) -> bool:
         return any(i.name == name for i in self._data)
 
@@ -28,6 +30,13 @@ class Asm(py_asm_abstract.PyToAssembly):
         @py_to_asm_wrappers.validate_asm_integer
         def __wrapper(_value:int):
             return asm_types.AsmInteger(_value)
+        return __wrapper
+    
+    @property
+    def asmfloat(self):
+        @py_to_asm_wrappers.validate_asm_float
+        def __wrapper(_value:float):
+            return asm_types.AsmFloat(_value)
         return __wrapper
 
     
@@ -44,7 +53,7 @@ class Asm(py_asm_abstract.PyToAssembly):
         return '{}({})'.format(_type.asm_type, _type._base)
     
     @py_to_asm_wrappers.is_valid_data
-    def declare(self, _name:str, _to_store:[list, int]) -> None:
+    def declare(self, _name:str, _to_store:[list, int, float]) -> None:
         self._data.append(asm_types.StaticStorage(_name, _to_store))
 
     @py_to_asm_wrappers.validate_mov
@@ -67,6 +76,24 @@ class Asm(py_asm_abstract.PyToAssembly):
         self._disassembled.append(f'<right load: {self.__class__.functionize(src)}')
         self._disassembled.append(f'add in_place=True')
 
+    @py_to_asm_wrappers.validate_inplace
+    def increment(self, _src) -> None:
+        self._instructions.append(f'incl {str(_src)}')
+        self._disassembled.append(f'increment {self.__class__.functionize(_src)}')
+    
+    @property
+    def label(self):
+        return asm_types._Label(self)
+    
+    def goto(self, _label, suppress_check=False):
+        self._instructions.append(f'jmp {str(_label)}')
+        self._disassembled.append(f'GOTO {str(_label)}')
+
+    @py_to_asm_wrappers.validate_inplace
+    def decrement(self, _src) -> None:
+        self._instructions.append(f'decl {str(_src)}')
+        self._disassembled.append(f'decrement {self.__class__.functionize(_src)}')
+
     @py_to_asm_wrappers.weak_operation_validate
     def sub(self, dest, src) -> None:
         self._instructions.append(f'subl {str(src)}, {str(dest)}')
@@ -81,6 +108,21 @@ class Asm(py_asm_abstract.PyToAssembly):
         self._disassembled.append(f'<multiplier load: {self.__class__.functionize(src)}')
         self._disassembled.append(f'mul in_place=True')
     
+    @py_to_asm_wrappers.div_validate
+    def div(self, num, den, int_res = None, mod = None) -> None:
+        self._instructions.append('idivl %ecx')
+        self._disassembled.append('div')
+
+    @py_to_asm_wrappers.compare_validate
+    def cmp(self, left, right, operator, label):
+        self._instructions.append(f'cmpl {str(right)}, {str(left)}')
+        self._instructions.append(f'{str(operator)} {label}')
+        self._disassembled.append(f'COMPARE {self.__class__.functionize(left)}, {self.__class__.functionize(right)}: {operator._rep} => {str(label)}')
+
+    @property
+    def operator(self):
+        return asm_types._Comparision()
+
     @property
     def register(self):
         return asm_types._Register(self)
@@ -96,11 +138,17 @@ class Asm(py_asm_abstract.PyToAssembly):
     def variable(self):
         return asm_types._Variable(self)
 
+    def label_exists(self, _name):
+        print('in here')
+        if self.label_name != _name:
+            return getattr(self._next, 'label_exists', lambda _:False)(_name)
+        return True
+
     def _get_dissassembled(self):
         return self._disassembled+getattr(self._next, '_get_dissassembled', lambda :[])()
 
     def dis(self) -> str:
-        return '\n'.join(self._get_dissassembled())
+        return '\n'.join(f'{i}  {a}' for i, a in enumerate(self._get_dissassembled(), 1))
 
     @contextlib.contextmanager
     @py_to_asm_wrappers.validate_filename
@@ -136,15 +184,26 @@ class Asm(py_asm_abstract.PyToAssembly):
         _setup_formatted = '\n'.join(self._setup)
         _body = '{}:\n{}'.format(self.label_name, '\n'.join('\t{}'.format(i) for i in self._instructions))+'\n\n'+str(self._next if self._next is not None else '')
         return f'{_data_formatted}\n\n{_setup_formatted}\n{_body}'
-    
-if __name__ == '__main__':
-    with Asm(_label_name = '_main', is_main = True) as asm:
-        asm.declare('james', [16, 17, 18])
-        asm.declare('joe', 15)
-        asm.mov(asm.register.EAX, asm.integer(5))
-        asm.mov(asm.register.EDX, asm.variable.joe)
-        asm.mul(asm.variable.james[asm.integer(1)], asm.register.EAX)    
-    print(asm)
+    @py_to_asm_wrappers.validate_copy_lookup
+    def __getattr__(self, _instruction):
+        return self._copies[_instruction]
+
+with Asm(_label_name = '_main', is_main = True) as asm:
+    asm.declare('james', [16, 17, 18])
+    asm.declare('joe', 15)
+    asm.declare('lill', 30)
+    asm.div(asm.variable.lill, asm.integer(2), int_res = asm.variable.result, mod=asm.variable.modulo)
+    asm.mov(asm.register.EAX, asm.asmfloat(23.232))
+    asm.mov(asm.stackref, asm.integer(20))
+    asm.cmp(asm.integer(32), asm.variable.joe, asm.operator.eq, asm.label._james)
+    with Asm(_label_name = '_james') as asm2:
+        asm2.add(asm2.variable.joe, asm2.integer(2))
+
+    asm.add_label(asm2)
+
+  
+
+print(asm)
 
 
 
