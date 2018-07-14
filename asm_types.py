@@ -1,5 +1,26 @@
 import py_to_asm_wrappers
 import typing
+import asm_comparison_signs
+
+
+class _Comparision(asm_comparison_signs.Sign):
+    def __getattr__(self, _sign):
+        return getattr(self.__class__, _sign.capitalize())()
+
+class Label:
+    def __init__(self, _name):
+        self.name = _name
+    def __repr__(self):
+        return f'<label {self.name}>'
+    def __str__(self):
+        return self.name
+
+class _Label:
+    def __init__(self, _home):
+        self._ref = _home
+    #@py_to_asm_wrappers.validate_label_name
+    def __getattr__(self, _label_name):
+        return Label(_label_name)
 
 class ArrayIndex:
     def __init__(self, _index, _home):
@@ -14,6 +35,16 @@ class AsmInteger:
     def __init__(self, _val:int) -> None:
         self.name = _val
         self.asm_type = 'integer'
+        self._base = _val
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.name})'
+    def __str__(self):
+        return f'${self.name}'
+
+class AsmFloat:
+    def __init__(self, _val:float) -> None:
+        self.name = _val
+        self.asm_type = 'float'
         self._base = _val
     def __repr__(self):
         return f'{self.__class__.__name__}({self.name})'
@@ -35,7 +66,7 @@ class StaticStorage:
         self.name = _name
         self._data = _data
     def __str__(self):
-        return f'{self.name}:.int {", ".join(map(str, self._data)) if isinstance(self._data, list) else self._data}'
+        return f'{self.name}:.{type(self._data).__name__ if not isinstance(self._data, list) else type(self._data[0]).__name__} {", ".join(map(str, self._data)) if isinstance(self._data, list) else self._data}'
     def __repr__(self):
         return f"<variable '{self.name}':{'array' if isinstance(self._data, list) else 'int'}({self._data if isinstance(self._data, int) else ', '.join(map(str, self._data))})"
 
@@ -89,3 +120,4 @@ class _Variable:
     def __getattr__(self, _variable):
         return Variable(_variable, self.ref)
     
+
