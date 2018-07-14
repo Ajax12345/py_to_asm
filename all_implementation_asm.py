@@ -19,7 +19,6 @@ with py_to_asm.Asm(_label_name = '_main', is_main=True) as asm:
             asm3.mov(asm3.register.EAX, asm3.variable.success)
         with py_to_asm.Asm(_label_name='failed_all') as asm4:
             asm4.mov(asm4.register.EAX, asm4.variable.success)
-        
         asm2.add_label(asm3)
         asm2.add_label(asm4)
     asm.add_label(asm2)
