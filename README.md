@@ -47,3 +47,8 @@ end_results:
 	leave
 	ret
 ```
+
+
+For a more detailed example, see https://github.com/Ajax12345/py_to_asm/blob/master/all_implementation_asm.py.
+
+The code in this file generates x86_64 Assembly which implements the Python <code>all</code> function. The Python equivalent of the above in Assembly is <code>all(not i%2 for i in input)</code>
